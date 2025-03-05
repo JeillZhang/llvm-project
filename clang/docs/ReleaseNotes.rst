@@ -96,6 +96,9 @@ Resolutions to C++ Defect Reports
 - Implemented `CWG2918 Consideration of constraints for address of overloaded `
   `function <https://cplusplus.github.io/CWG/issues/2918.html>`_
 
+- Bumped the ``__cpp_constexpr`` feature-test macro to ``202002L`` in C++20 mode as indicated in
+  `P2493R0 <https://wg21.link/P2493R0>`_.
+
 C Language Changes
 ------------------
 
@@ -357,6 +360,8 @@ Fixed Point Support in Clang
 
 AST Matchers
 ------------
+
+- Ensure ``isDerivedFrom`` matches the correct base in case more than one alias exists.
 
 clang-format
 ------------
