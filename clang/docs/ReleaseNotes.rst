@@ -217,6 +217,8 @@ Modified Compiler Flags
 
 - The compiler flag `-fbracket-depth` default value is increased from 256 to 2048. (#GH94728)
 
+- `-Wpadded` option implemented for the `x86_64-windows-msvc` target. Fixes #61702
+
 Removed Compiler Flags
 -------------------------
 
@@ -355,6 +357,8 @@ Improvements to Clang's diagnostics
 
 - Now correctly diagnose a tentative definition of an array with static
   storage duration in pedantic mode in C. (#GH50661)
+
+- An error is now emitted when a ``musttail`` call is made to a function marked with the ``not_tail_called`` attribute. (#GH133509).
 
 Improvements to Clang's time-trace
 ----------------------------------
@@ -530,7 +534,6 @@ Windows Support
 - Clang now can process the `i128` and `ui128` integeral suffixes when MSVC
   extensions are enabled. This allows for properly processing ``intsafe.h`` in
   the Windows SDK.
-- Clang now supports MSVC vector deleting destructors (GH19772).
 
 LoongArch Support
 ^^^^^^^^^^^^^^^^^
