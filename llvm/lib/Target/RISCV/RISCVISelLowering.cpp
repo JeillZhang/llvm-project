@@ -395,7 +395,12 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
     if (Subtarget.is64Bit())
       setOperationAction({ISD::CTTZ, ISD::CTTZ_ZERO_UNDEF}, MVT::i32, Custom);
   } else {
-    setOperationAction({ISD::CTTZ, ISD::CTPOP}, XLenVT, Expand);
+    setOperationAction(ISD::CTTZ, XLenVT, Expand);
+    if (Subtarget.is64Bit())
+      setOperationAction(ISD::CTPOP, MVT::i128, LibCall);
+    else
+      setOperationAction(ISD::CTPOP, MVT::i32, LibCall);
+    setOperationAction(ISD::CTPOP, MVT::i64, LibCall);
   }
 
   if (Subtarget.hasStdExtZbb() || Subtarget.hasVendorXTHeadBb() ||
@@ -2909,7 +2914,7 @@ InstructionCost RISCVTargetLowering::getVRGatherVVCost(MVT VT) const {
   bool Log2CostModel =
       Subtarget.getVRGatherCostModel() == llvm::RISCVSubtarget::NLog2N;
   if (Log2CostModel && LMULCost.isValid()) {
-    unsigned Log = Log2_64(*LMULCost.getValue());
+    unsigned Log = Log2_64(LMULCost.getValue());
     if (Log > 0)
       return LMULCost * Log;
   }
