@@ -6,4 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-_CLC_OVERLOAD _CLC_DECL __CLC_FLOAT dot(__CLC_FLOATN p0, __CLC_FLOATN p1);
+#include <clc/geometric/clc_fast_length.h>
+#include <clc/internal/clc.h>
+
+#define __FLOAT_ONLY
+#define __CLC_BODY <clc_fast_distance.inc>
+#include <clc/math/gentype.inc>
