@@ -24,6 +24,8 @@
 #include "math/asinhf16.h"
 #include "math/atan.h"
 #include "math/atan2.h"
+#include "math/atan2f.h"
+#include "math/atan2f128.h"
 #include "math/atanf.h"
 #include "math/atanf16.h"
 #include "math/erff.h"
