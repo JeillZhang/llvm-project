@@ -5417,6 +5417,7 @@ QualType TreeTransform<Derived>::TransformTypeInObjectScope(
   case TypeLoc::Typedef:
   case TypeLoc::TemplateSpecialization:
   case TypeLoc::SubstTemplateTypeParm:
+  case TypeLoc::SubstTemplateTypeParmPack:
   case TypeLoc::PackIndexing:
   case TypeLoc::Enum:
   case TypeLoc::Record:
@@ -12295,18 +12296,36 @@ void OpenACCClauseTransform<Derived>::VisitReductionClause(
     const OpenACCReductionClause &C) {
   SmallVector<Expr *> TransformedVars = VisitVarList(C.getVarList());
   SmallVector<Expr *> ValidVars;
+  llvm::SmallVector<OpenACCReductionRecipe> Recipes;
 
-  for (Expr *Var : TransformedVars) {
+  for (const auto [Var, OrigRecipes] :
+       llvm::zip(TransformedVars, C.getRecipes())) {
     ExprResult Res = Self.getSema().OpenACC().CheckReductionVar(
         ParsedClause.getDirectiveKind(), C.getReductionOp(), Var);
-    if (Res.isUsable())
+    if (Res.isUsable()) {
       ValidVars.push_back(Res.get());
+
+      // TODO OpenACC: When the recipe changes, make sure we get these right
+      // too. We probably need something similar for the operation.
+      static_assert(sizeof(OpenACCReductionRecipe) == sizeof(int*));
+      VarDecl *InitRecipe = nullptr;
+      if (OrigRecipes.RecipeDecl)
+        InitRecipe = OrigRecipes.RecipeDecl;
+       else
+         InitRecipe =
+             Self.getSema()
+                 .OpenACC()
+                 .CreateInitRecipe(OpenACCClauseKind::Reduction, Res.get())
+                 .first;
+
+      Recipes.push_back({InitRecipe});
+    }
   }
 
   NewClause = Self.getSema().OpenACC().CheckReductionClause(
       ExistingClauses, ParsedClause.getDirectiveKind(),
       ParsedClause.getBeginLoc(), ParsedClause.getLParenLoc(),
-      C.getReductionOp(), ValidVars, ParsedClause.getEndLoc());
+      C.getReductionOp(), ValidVars, Recipes, ParsedClause.getEndLoc());
 }
 
 template <typename Derived>
