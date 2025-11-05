@@ -167,8 +167,7 @@ static bool sinkScalarOperands(VPlan &Plan) {
     if (!isa<VPReplicateRecipe, VPScalarIVStepsRecipe>(Candidate))
       return;
 
-    if (Candidate->getParent() == SinkTo || Candidate->mayHaveSideEffects() ||
-        Candidate->mayReadOrWriteMemory())
+    if (Candidate->getParent() == SinkTo || cannotHoistOrSinkRecipe(*Candidate))
       return;
 
     if (auto *RepR = dyn_cast<VPReplicateRecipe>(Candidate))
@@ -1284,6 +1283,15 @@ static void simplifyRecipe(VPSingleDefRecipe *Def, VPTypeAnalysis &TypeInfo) {
   if (match(Def, m_BuildVector()) && all_equal(Def->operands())) {
     Def->replaceAllUsesWith(
         Builder.createNaryOp(VPInstruction::Broadcast, Def->getOperand(0)));
+    return;
+  }
+
+  // Look through broadcast of single-scalar when used as select conditions; in
+  // that case the scalar condition can be used directly.
+  if (match(Def,
+            m_Select(m_Broadcast(m_VPValue(C)), m_VPValue(), m_VPValue())) &&
+      vputils::isSingleScalar(C)) {
+    Def->setOperand(0, C);
     return;
   }
 
