@@ -1541,6 +1541,7 @@ filegroup(
         ":TransformSMTExtensionOpsPyGen",
         ":VectorTransformEnumPyGen",
         ":VectorTransformOpsPyGen",
+        ":XeGPUTransformOpsPyGen",
     ],
 )
 
@@ -1638,9 +1639,9 @@ gentbl_filegroup(
         "-bind-dialect=transform",
         "-dialect-extension=xegpu_transform",
     ]},
-    tblgen = "//third_party/llvm/llvm-project/mlir:mlir-tblgen",
+    tblgen = "//mlir:mlir-tblgen",
     td_file = "mlir/dialects/XeGPUTransformOps.td",
     deps = [
-        "//third_party/llvm/llvm-project/mlir:XeGPUTransformOpsTdFiles",
+        "//mlir:XeGPUTransformOpsTdFiles",
     ],
 )
