@@ -7307,7 +7307,9 @@ DenseMap<const SCEV *, Value *> LoopVectorizationPlanner::executePlan(
 
   VPlanTransforms::narrowInterleaveGroups(
       BestVPlan, BestVF,
-      TTI.getRegisterBitWidth(TargetTransformInfo::RGK_FixedWidthVector));
+      TTI.getRegisterBitWidth(BestVF.isScalable()
+                                  ? TargetTransformInfo::RGK_ScalableVector
+                                  : TargetTransformInfo::RGK_FixedWidthVector));
   VPlanTransforms::removeDeadRecipes(BestVPlan);
 
   VPlanTransforms::convertToConcreteRecipes(BestVPlan);
@@ -7631,6 +7633,14 @@ createWidenInductionRecipes(VPInstruction *PhiR,
 
   VPValue *Step =
       vputils::getOrCreateVPValueForSCEVExpr(Plan, IndDesc.getStep());
+
+  // Update wide induction increments to use the same step as the corresponding
+  // wide induction. This enables detecting induction increments directly in
+  // VPlan and removes redundant splats.
+  using namespace llvm::VPlanPatternMatch;
+  if (match(PhiR->getOperand(1), m_Add(m_Specific(PhiR), m_VPValue())))
+    PhiR->getOperand(1)->getDefiningRecipe()->setOperand(1, Step);
+
   PHINode *Phi = cast<PHINode>(PhiR->getUnderlyingInstr());
   return new VPWidenIntOrFpInductionRecipe(Phi, Start, Step, &Plan.getVF(),
                                            IndDesc, PhiR->getDebugLoc());
@@ -8471,20 +8481,6 @@ VPlanPtr LoopVectorizationPlanner::tryToBuildVPlanWithVPRecipes(
          "entry block must be set to a VPRegionBlock having a non-empty entry "
          "VPBasicBlock");
 
-  // Update wide induction increments to use the same step as the corresponding
-  // wide induction. This enables detecting induction increments directly in
-  // VPlan and removes redundant splats.
-  for (const auto &[Phi, ID] : Legal->getInductionVars()) {
-    auto *IVInc = cast<Instruction>(
-        Phi->getIncomingValueForBlock(OrigLoop->getLoopLatch()));
-    if (IVInc->getOperand(0) != Phi || IVInc->getOpcode() != Instruction::Add)
-      continue;
-    VPWidenInductionRecipe *WideIV =
-        cast<VPWidenInductionRecipe>(RecipeBuilder.getRecipe(Phi));
-    VPRecipeBase *R = RecipeBuilder.getRecipe(IVInc);
-    R->setOperand(1, WideIV->getStepValue());
-  }
-
   // TODO: We can't call runPass on these transforms yet, due to verifier
   // failures.
   VPlanTransforms::addExitUsersForFirstOrderRecurrences(*Plan, Range);
@@ -8893,7 +8889,8 @@ void LoopVectorizationPlanner::adjustRecipesForReductions(
       if (FinalReductionResult == U || Parent->getParent())
         continue;
       U->replaceUsesOfWith(OrigExitingVPV, FinalReductionResult);
-      if (match(U, m_ExtractLastElement(m_VPValue())))
+      if (match(U, m_CombineOr(m_ExtractLastElement(m_VPValue()),
+                               m_ExtractLane(m_VPValue(), m_VPValue()))))
         cast<VPInstruction>(U)->replaceAllUsesWith(FinalReductionResult);
     }
 
