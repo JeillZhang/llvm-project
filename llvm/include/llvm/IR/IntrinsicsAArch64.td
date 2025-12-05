@@ -2797,7 +2797,16 @@ def int_aarch64_sve_sudot_lane : AdvSIMD_SVE_DOT_Indexed_Intrinsic<[IntrSpeculat
 //
 // SVE ACLE: 7.4/5. FP64/FP32 matrix multiply extensions
 //
-def int_aarch64_sve_fmmla : AdvSIMD_3VectorArg_Intrinsic;
+
+def int_aarch64_sve_fmmla
+  : DefaultAttrsIntrinsic<[llvm_anyvector_ty],
+                          [LLVMMatchType<0>, llvm_anyvector_ty, LLVMMatchType<1>],
+                          [IntrNoMem]>;
+
+def int_aarch64_sve_fp8_fmmla
+  : DefaultAttrsIntrinsic<[llvm_anyvector_ty],
+                          [LLVMMatchType<0>, llvm_nxv16i8_ty, llvm_nxv16i8_ty],
+                          [IntrReadMem, IntrInaccessibleMemOnly]>;
 
 //
 // SVE ACLE: 7.2. BFloat16 extensions
@@ -3298,6 +3307,12 @@ let TargetPrefix = "aarch64" in {
                  LLVMMatchType<0>],
                 [IntrNoMem]>;
 
+  class SVE2_VG2_Multi_Single_Scale_Intrinsic
+    : DefaultAttrsIntrinsic<[llvm_anyvector_ty, LLVMMatchType<0>],
+                [LLVMMatchType<0>, LLVMMatchType<0>,
+                 LLVMVectorOfBitcastsToInt<0>],
+                [IntrNoMem]>;
+
   class SVE2_VG4_Multi_Single_Intrinsic
     : DefaultAttrsIntrinsic<[llvm_anyvector_ty, LLVMMatchType<0>,
                              LLVMMatchType<0>,  LLVMMatchType<0>],
@@ -3306,10 +3321,24 @@ let TargetPrefix = "aarch64" in {
                              LLVMMatchType<0>],
                             [IntrNoMem]>;
 
+  class SVE2_VG4_Multi_Single_Scale_Intrinsic
+    : DefaultAttrsIntrinsic<[llvm_anyvector_ty, LLVMMatchType<0>,
+                             LLVMMatchType<0>,  LLVMMatchType<0>],
+                            [LLVMMatchType<0>,  LLVMMatchType<0>,
+                             LLVMMatchType<0>,  LLVMMatchType<0>,
+                             LLVMVectorOfBitcastsToInt<0>],
+                            [IntrNoMem]>;
+
   class SVE2_VG2_Multi_Multi_Intrinsic
     : DefaultAttrsIntrinsic<[llvm_anyvector_ty, LLVMMatchType<0>],
                 [LLVMMatchType<0>, LLVMMatchType<0>,
                  LLVMMatchType<0>, LLVMMatchType<0>],
+                [IntrNoMem]>;
+
+  class SVE2_VG2_Multi_Multi_Scale_Intrinsic
+    : DefaultAttrsIntrinsic<[llvm_anyvector_ty, LLVMMatchType<0>],
+                [LLVMMatchType<0>, LLVMMatchType<0>,
+                 LLVMVectorOfBitcastsToInt<0>, LLVMVectorOfBitcastsToInt<0>],
                 [IntrNoMem]>;
 
   class SVE2_VG4_Multi_Multi_Intrinsic
@@ -3319,6 +3348,15 @@ let TargetPrefix = "aarch64" in {
                              LLVMMatchType<0>,  LLVMMatchType<0>,
                              LLVMMatchType<0>, LLVMMatchType<0>,
                              LLVMMatchType<0>, LLVMMatchType<0>],
+                            [IntrNoMem]>;
+
+  class SVE2_VG4_Multi_Multi_Scale_Intrinsic
+    : DefaultAttrsIntrinsic<[llvm_anyvector_ty, LLVMMatchType<0>,
+                             LLVMMatchType<0>,  LLVMMatchType<0>],
+                            [LLVMMatchType<0>,  LLVMMatchType<0>,
+                             LLVMMatchType<0>,  LLVMMatchType<0>,
+                             LLVMVectorOfBitcastsToInt<0>, LLVMVectorOfBitcastsToInt<0>,
+                             LLVMVectorOfBitcastsToInt<0>, LLVMVectorOfBitcastsToInt<0>],
                             [IntrNoMem]>;
 
   class SVE2_VG2_Sel_Intrinsic
@@ -3619,10 +3657,10 @@ let TargetPrefix = "aarch64" in {
   }
 
   //
-  // Multi-vector floating point min/max number
+  // Multi-vector floating point min/max number, scale, and multiply
   //
 
-  foreach instr = ["fmaxnm", "fminnm"] in {
+  foreach instr = ["fmaxnm", "fminnm", "fmul"] in {
     def int_aarch64_sve_ # instr # _single_x2 : SVE2_VG2_Multi_Single_Intrinsic;
     def int_aarch64_sve_ # instr # _single_x4 : SVE2_VG4_Multi_Single_Intrinsic;
 
@@ -3630,6 +3668,16 @@ let TargetPrefix = "aarch64" in {
     def int_aarch64_sve_ # instr # _x4 : SVE2_VG4_Multi_Multi_Intrinsic;
   }
 
+  //
+  // Multi-vector floating point scale
+  //
+
+  def int_aarch64_sve_fscale_single_x2 : SVE2_VG2_Multi_Single_Scale_Intrinsic;
+  def int_aarch64_sve_fscale_single_x4 : SVE2_VG4_Multi_Single_Scale_Intrinsic;
+
+  def int_aarch64_sve_fscale_x2 : SVE2_VG2_Multi_Multi_Scale_Intrinsic;
+  def int_aarch64_sve_fscale_x4 : SVE2_VG4_Multi_Multi_Scale_Intrinsic;
+  
   //
   // Multi-vector floating point absolute min/max number
   //
