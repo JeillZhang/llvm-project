@@ -138,11 +138,6 @@ static auto valueOperatorCall() {
                     isStatusOrOperatorCallWithName("->")));
 }
 
-static clang::ast_matchers::TypeMatcher statusType() {
-  using namespace ::clang::ast_matchers; // NOLINT: Too many names
-  return hasCanonicalType(qualType(hasDeclaration(statusClass())));
-}
-
 static auto isComparisonOperatorCall(llvm::StringRef operator_name) {
   using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return cxxOperatorCallExpr(
@@ -351,6 +346,25 @@ static auto isAssertionResultConstructFromBoolCall() {
       hasArgument(0, hasType(booleanType())));
 }
 
+static auto isStatusOrReturningCall() {
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
+  return callExpr(
+      callee(functionDecl(returns(possiblyReferencedStatusOrType()))));
+}
+
+static auto isStatusOrPtrReturningCall() {
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
+  return callExpr(callee(functionDecl(returns(hasUnqualifiedDesugaredType(
+      pointerType(pointee(possiblyReferencedStatusOrType())))))));
+}
+
+static auto isStatusPtrReturningCall() {
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
+  return callExpr(callee(functionDecl(returns(hasUnqualifiedDesugaredType(
+      pointerType(pointee(hasUnqualifiedDesugaredType(
+          recordType(hasDeclaration(statusClass()))))))))));
+}
+
 static auto
 buildDiagnoseMatchSwitch(const UncheckedStatusOrAccessModelOptions &Options) {
   return CFGMatchSwitchBuilder<const Environment,
@@ -425,6 +439,11 @@ clang::ast_matchers::DeclarationMatcher statusOrOperatorBaseClass() {
 clang::ast_matchers::TypeMatcher statusOrType() {
   using namespace ::clang::ast_matchers; // NOLINT: Too many names
   return hasCanonicalType(qualType(hasDeclaration(statusOrClass())));
+}
+
+clang::ast_matchers::TypeMatcher statusType() {
+  using namespace ::clang::ast_matchers; // NOLINT: Too many names
+  return hasCanonicalType(qualType(hasDeclaration(statusClass())));
 }
 
 bool isStatusOrType(QualType Type) {
@@ -1044,6 +1063,70 @@ transferAssertionResultOperatorBoolCall(const CXXMemberCallExpr *Expr,
   State.Env.setValue(*Expr, Res);
 }
 
+static void transferDerefCall(const CXXOperatorCallExpr *Expr,
+                              const MatchFinder::MatchResult &,
+                              LatticeTransferState &State) {
+  auto *StatusOrLoc = State.Env.get<RecordStorageLocation>(*Expr->getArg(0));
+
+  if (StatusOrLoc && State.Env.getStorageLocation(*Expr) == nullptr)
+    State.Env.setStorageLocation(*Expr,
+                                 StatusOrLoc->getSyntheticField("value"));
+}
+
+static void transferArrowCall(const CXXOperatorCallExpr *Expr,
+                              const MatchFinder::MatchResult &,
+                              LatticeTransferState &State) {
+  auto *StatusOrLoc = State.Env.get<RecordStorageLocation>(*Expr->getArg(0));
+  if (!StatusOrLoc)
+    return;
+  State.Env.setValue(*Expr, State.Env.create<PointerValue>(
+                                StatusOrLoc->getSyntheticField("value")));
+}
+
+static void transferValueCall(const CXXMemberCallExpr *Expr,
+                              const MatchFinder::MatchResult &,
+                              LatticeTransferState &State) {
+  auto *StatusOrLoc = getImplicitObjectLocation(*Expr, State.Env);
+
+  if (StatusOrLoc && State.Env.getStorageLocation(*Expr) == nullptr)
+    State.Env.setStorageLocation(*Expr,
+                                 StatusOrLoc->getSyntheticField("value"));
+}
+
+static void transferStatusOrPtrReturningCall(const CallExpr *Expr,
+                                             const MatchFinder::MatchResult &,
+                                             LatticeTransferState &State) {
+  PointerValue *PointerVal =
+      dyn_cast_or_null<PointerValue>(State.Env.getValue(*Expr));
+  if (!PointerVal) {
+    PointerVal = cast<PointerValue>(State.Env.createValue(Expr->getType()));
+    State.Env.setValue(*Expr, *PointerVal);
+  }
+
+  auto *RecordLoc =
+      dyn_cast_or_null<RecordStorageLocation>(&PointerVal->getPointeeLoc());
+  if (RecordLoc != nullptr &&
+      State.Env.getValue(locForOk(locForStatus(*RecordLoc))) == nullptr)
+    initializeStatusOr(*RecordLoc, State.Env);
+}
+
+static void transferStatusPtrReturningCall(const CallExpr *Expr,
+                                           const MatchFinder::MatchResult &,
+                                           LatticeTransferState &State) {
+  PointerValue *PointerVal =
+      dyn_cast_or_null<PointerValue>(State.Env.getValue(*Expr));
+  if (!PointerVal) {
+    PointerVal = cast<PointerValue>(State.Env.createValue(Expr->getType()));
+    State.Env.setValue(*Expr, *PointerVal);
+  }
+
+  auto *RecordLoc =
+      dyn_cast_or_null<RecordStorageLocation>(&PointerVal->getPointeeLoc());
+  if (RecordLoc != nullptr &&
+      State.Env.getValue(locForOk(*RecordLoc)) == nullptr)
+    initializeStatus(*RecordLoc, State.Env);
+}
+
 static RecordStorageLocation *
 getSmartPtrLikeStorageLocation(const Expr &E, const Environment &Env) {
   if (!E.isPRValue())
@@ -1130,6 +1213,12 @@ buildTransferMatchSwitch(ASTContext &Ctx,
                                           transferValueAssignmentCall)
       .CaseOfCFGStmt<CXXConstructExpr>(isStatusOrValueConstructor(),
                                        transferValueConstructor)
+      .CaseOfCFGStmt<CXXOperatorCallExpr>(isStatusOrOperatorCallWithName("->"),
+                                          transferArrowCall)
+      .CaseOfCFGStmt<CXXOperatorCallExpr>(isStatusOrOperatorCallWithName("*"),
+                                          transferDerefCall)
+      .CaseOfCFGStmt<CXXMemberCallExpr>(isStatusOrMemberCallWithName("value"),
+                                        transferValueCall)
       .CaseOfCFGStmt<CallExpr>(isAsStatusCallWithStatus(),
                                transferAsStatusCallWithStatus)
       .CaseOfCFGStmt<CallExpr>(isAsStatusCallWithStatusOr(),
@@ -1192,6 +1281,18 @@ buildTransferMatchSwitch(ASTContext &Ctx,
                                         transferNonConstMemberCall)
       .CaseOfCFGStmt<CXXOperatorCallExpr>(isNonConstMemberOperatorCall(),
                                           transferNonConstMemberOperatorCall)
+      // N.B. this has to be after transferConstMemberCall, otherwise we would
+      // always return a fresh RecordStorageLocation for the StatusOr.
+      .CaseOfCFGStmt<CallExpr>(isStatusOrReturningCall(),
+                               [](const CallExpr *Expr,
+                                  const MatchFinder::MatchResult &,
+                                  LatticeTransferState &State) {
+                                 transferStatusOrReturningCall(Expr, State);
+                               })
+      .CaseOfCFGStmt<CallExpr>(isStatusOrPtrReturningCall(),
+                               transferStatusOrPtrReturningCall)
+      .CaseOfCFGStmt<CallExpr>(isStatusPtrReturningCall(),
+                               transferStatusPtrReturningCall)
       // N.B. These need to come after all other CXXConstructExpr.
       // These are there to make sure that every Status and StatusOr object
       // have their ok boolean initialized when constructed. If we were to
