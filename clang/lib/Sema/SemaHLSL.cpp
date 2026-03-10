@@ -2142,6 +2142,24 @@ bool SemaHLSL::handleResourceTypeAttr(QualType T, const ParsedAttr &AL) {
     break;
   }
 
+  case ParsedAttr::AT_HLSLResourceDimension: {
+    StringRef Identifier;
+    SourceLocation ArgLoc;
+    if (!SemaRef.checkStringLiteralArgumentAttr(AL, 0, Identifier, &ArgLoc))
+      return false;
+
+    // Validate resource dimension value
+    llvm::dxil::ResourceDimension RD;
+    if (!HLSLResourceDimensionAttr::ConvertStrToResourceDimension(Identifier,
+                                                                  RD)) {
+      Diag(ArgLoc, diag::warn_attribute_type_not_supported)
+          << "ResourceDimension" << Identifier;
+      return false;
+    }
+    A = HLSLResourceDimensionAttr::Create(getASTContext(), RD, ACI);
+    break;
+  }
+
   case ParsedAttr::AT_HLSLROV:
     A = HLSLROVAttr::Create(getASTContext(), ACI);
     break;
@@ -3991,6 +4009,33 @@ bool SemaHLSL::CheckBuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall) {
       return true;
     ExprResult Expr = TheCall->getArg(0);
     QualType ArgTyExpr = Expr.get()->getType();
+    TheCall->setType(ArgTyExpr);
+    break;
+  }
+  case Builtin::BI__builtin_hlsl_wave_active_bit_or: {
+    if (SemaRef.checkArgCount(TheCall, 1))
+      return true;
+
+    // Ensure input expr type is a scalar/vector
+    if (CheckAnyScalarOrVector(&SemaRef, TheCall, 0))
+      return true;
+
+    if (CheckWaveActive(&SemaRef, TheCall))
+      return true;
+
+    // Ensure the expr type is interpretable as a uint or vector<uint>
+    ExprResult Expr = TheCall->getArg(0);
+    QualType ArgTyExpr = Expr.get()->getType();
+    auto *VTy = ArgTyExpr->getAs<VectorType>();
+    if (!(ArgTyExpr->isIntegerType() ||
+          (VTy && VTy->getElementType()->isIntegerType()))) {
+      SemaRef.Diag(TheCall->getArg(0)->getBeginLoc(),
+                   diag::err_builtin_invalid_arg_type)
+          << ArgTyExpr << SemaRef.Context.UnsignedIntTy << 1 << 0 << 0;
+      return true;
+    }
+
+    // Ensure input expr type is the same as the return type
     TheCall->setType(ArgTyExpr);
     break;
   }
