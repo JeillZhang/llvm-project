@@ -894,7 +894,7 @@ bool CheckStore(InterpState &S, CodePtr OpPC, const Pointer &Ptr,
     return false;
   if (!CheckVolatile(S, OpPC, Ptr, AK_Assign))
     return false;
-  if (!S.inConstantContext() && isConstexprUnknown(Ptr))
+  if (isConstexprUnknown(Ptr))
     return false;
   return true;
 }
@@ -2678,6 +2678,46 @@ bool CastMemberPtrDerivedPop(InterpState &S, CodePtr OpPC, int32_t Off,
   }
 
   return castBackMemberPointer(S, Ptr, Off, BaseDecl);
+}
+
+bool GetMemberPtr(InterpState &S, CodePtr OpPC, const ValueDecl *D) {
+  S.Stk.push<MemberPointer>(D);
+  return true;
+}
+
+bool GetMemberPtrBase(InterpState &S, CodePtr OpPC) {
+  const auto &MP = S.Stk.pop<MemberPointer>();
+
+  if (!MP.isBaseCastPossible())
+    return false;
+
+  S.Stk.push<Pointer>(MP.getBase());
+  return true;
+}
+
+bool GetMemberPtrDecl(InterpState &S, CodePtr OpPC) {
+  const auto &MP = S.Stk.pop<MemberPointer>();
+
+  const ValueDecl *D = MP.getDecl();
+  const auto *FD = dyn_cast_if_present<FunctionDecl>(D);
+  if (!FD)
+    return false;
+
+  const auto *Method = dyn_cast<CXXMethodDecl>(FD);
+  if (!Method)
+    return false;
+
+  const Pointer &Base = MP.getBase();
+  // The method must be accessible via the base of the MemberPointer.
+  const CXXRecordDecl *MethodParent = Method->getParent();
+  if (!Base.getRecord() || Base.getRecord()->getDecl() != MethodParent)
+    return false;
+
+  const auto *Func = S.getContext().getOrCreateFunction(FD);
+  if (!Func)
+    return false;
+  S.Stk.push<Pointer>(Func);
+  return true;
 }
 
 // FIXME: Would be nice to generate this instead of hardcoding it here.
