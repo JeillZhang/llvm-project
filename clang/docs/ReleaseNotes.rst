@@ -260,6 +260,8 @@ Non-comprehensive list of changes in this release
 - ``typeid`` on references and pointers of ``final`` types no longer emits a
   vtable lookup at runtime.
 
+- Updated support for Unicode from 15.1 to 18.0.
+
 New Compiler Flags
 ------------------
 - New option ``-fms-anonymous-structs`` / ``-fno-ms-anonymous-structs`` added
@@ -508,6 +510,8 @@ Improvements to Clang's diagnostics
 
 - Added warnings for floating-point exception function calls (fenv.h) without enabling
   floating-point exception behavior via the appropriate flags or pragmas. (#GH128239)
+  
+- The diagnostics around ``__block`` now explain why a variable cannot be marked ``__block``. (#GH197213)
 
 Improvements to Clang's time-trace
 ----------------------------------
